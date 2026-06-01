@@ -1,0 +1,6 @@
+google-adk
+motor
+pymongo
+google-cloud-secret-manager
+mcp
+python-dotenv
