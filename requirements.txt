@@ -1,6 +1,8 @@
 google-adk
 motor
+pandas
 pymongo
 google-cloud-secret-manager
 mcp
 python-dotenv
+google-adk[eval]
