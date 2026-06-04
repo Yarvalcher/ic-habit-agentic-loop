@@ -22,19 +22,20 @@ The core logic resides in `agent_brain/agent.py` and is built using the Google A
 
 ### 🧠 The Lead Controller (`habit_os_control_agent`)
 An autonomous physiological optimization engine that monitors "metabolic drift" and maximizes athlete performance.
+- Retrieves global user profiles via `get_active_user_profile` to ground its recommendations in the athlete's goals, age, and dietary strategy.
 - Evaluates high-level correlations between training volume and sleep (`get_performance_correlation`).
-- Uses the `mongodb-mcp-server` (via Model Context Protocol) to seamlessly save recommendations and processed profiles into MongoDB.
+- Uses the `mongodb-mcp-server` (via Model Context Protocol) to seamlessly save recommendations and processed profiles into MongoDB (The "Decision Log").
 - Triggers Deload Phases if metrics indicate high strain.
 
 ### 🕵️ Specialized Sub-Agents
-The controller delegates domain-specific analysis to these agents using custom tools (`tool_context.run_node`):
+The controller delegates domain-specific analysis to these agents using custom tools (`tool_context.run_node`). Sub-agents now receive a strict Pydantic-validated `UserProfile` context and cross-agent findings in their payload:
 - **Sleep Analyst (`sleep_agent`)**: Analyzes sleep hygiene, REM cycles, and recovery quality.
 - **Exercise Metrics Analyst (`exercise_metrics_agent`)**: Analyzes training volume, physiological strain, and daily movement.
 - **Weight Analyst (`weight_agent`)**: Tracks body composition trends and caloric maintenance levels.
 
-### 🔒 Security and Database Integration
+### 🔒 Security, Validation, and Database Integration
 - **GCP Secret Manager**: Securely fetches the `GEMINI_API` key and `mongodb_url` using Google Application Default Credentials (ADC).
-- **Direct MongoDB Integration**: Uses `motor` (async MongoDB driver) to fetch recent telemetry logs and feed them directly into the sub-agent context payloads.
+- **Direct MongoDB Integration & Pydantic**: Uses `motor` (async MongoDB driver) to fetch recent telemetry logs. Data is strictly validated and cleaned using `pydantic` models before being fed into sub-agent contexts, protecting the LLM from bad data.
 
 ## Getting Started
 

@@ -4,20 +4,19 @@ Based on the roadmap outlined in `ideas.md`, here is the tracked status of all i
 
 ## Phase 1: Semantic & Dynamic Intelligence
 
-- [ ] **Task 1: OSI Metadata Integration**
-  - Create a metadata collection in MongoDB.
-  - Store the OSI schema to provide context to the agent.
-- [ ] **Task 2: The "Prime Directive" Tool**
-  - Write a tool `get_semantic_mapping(domain: str)` that fetches synonyms and field definitions to help the agent understand raw JSON.
+- [x] **Task 1 & 2: Schema Mapping & Pydantic Validation**
+  - Added a static `SCHEMA_MAPPING` to provide semantics.
+  - Implemented strict Pydantic models (`UserProfile`, etc.) to validate and clean the MongoDB output, protecting the LLM from bad data.
 - [x] **Task 3: Dynamic Windowing**
-  - Update `get_performance_correlation` to accept a `days` argument. *(Already implemented in `agent.py`)*
+  - Update `get_performance_correlation` to accept a `days` argument. *(Implemented in `agent.py`)*
 
 ## Phase 2: Collaboration & Memory
 
-- [ ] **Task 4: Cross-Agent Context**
-  - Update sub-agent tool wrappers (`tool_analyze_sleep`, `tool_analyze_exercise_and_metrics`, etc.) to pass relevant conversation history or insights discovered by other agents into the `ToolContext`.
-- [ ] **Task 5: The "Decision Log" (MCP Write)**
-  - Update the root agent's logic/prompt to explicitly use the `insert-one` MCP tool to save a recommendations document ("Plan of Action") into MongoDB.
+- [x] **Task 4: Cross-Agent Context**
+  - Updated sub-agent tool wrappers to inject the `UserProfile` directly into the payload.
+  - Instructed the Root Agent to extract and pass relevant findings across sub-agents in the query string.
+- [x] **Task 5: The "Decision Log" (MCP Write)**
+  - Updated the root agent's logic to explicitly use the `insert-one` MCP tool to save recommendations ("Plan of Action") into MongoDB.
 
 ## Phase 3: Autonomous Monitoring
 
