@@ -1,6 +1,8 @@
 import os
 import asyncio
 from google.adk.agents.llm_agent import Agent
+from google.adk.runners import Runner
+from google.adk.sessions.in_memory_session_service import InMemorySessionService
 from motor.motor_asyncio import AsyncIOMotorClient
 from google.cloud import secretmanager
 from mcp import StdioServerParameters
@@ -10,6 +12,7 @@ import json
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+from google.genai import types
 
 def get_secret(secret_id):
     """Retrieves secrets from GCP Secret Manager using ADC."""
@@ -140,52 +143,90 @@ weight_agent = Agent(
 
 # --- Tool Wrappers for Sub-Agents ---
 
-from google.adk.tools.tool_context import ToolContext
 
-def _extract_text(result) -> str:
-    if hasattr(result, "text"):
-        return result.text
-    if isinstance(result, str):
-        return result
-    return str(result)
+async def _run_sub_agent(sub_agent: Agent, payload: str) -> str:
+    """
+    Invokes a sub-agent using the stable public Runner + InMemorySessionService API.
 
-async def tool_analyze_sleep(query: str, tool_context: ToolContext) -> str:
-    """Specialized tool using the ADK-native run pattern.
+    This is the correct, future-proof ADK pattern:
+    - Never touches private _invocation_context internals
+    - Runner handles all InvocationContext construction internally
+    - Immune to new mandatory fields added in future ADK versions
+    """
+    session_service = InMemorySessionService()
+    session = await session_service.create_session(
+        app_name="sub_agent_runner",
+        user_id="internal",
+    )
+    runner = Runner(
+        app_name="sub_agent_runner",
+        agent=sub_agent,
+        session_service=session_service,
+    )
+    new_message = types.Content(
+        role="user",
+        parts=[types.Part(text=payload)],
+    )
+    collected: list[str] = []
+    async for event in runner.run_async(
+        user_id="internal",
+        session_id=session.id,
+        new_message=new_message,
+    ):
+        if event.is_final_response() and event.content and event.content.parts:
+            for part in event.content.parts:
+                if part.text:
+                    collected.append(part.text)
+
+    return "\n".join(collected) if collected else "(no response from sub-agent)"
+
+
+async def tool_analyze_sleep(query: str) -> str:
+    """Specialized tool: delegates sleep log analysis to the sleep_analyst sub-agent.
     IMPORTANT FOR ROOT AGENT: Include any findings from other sub-agents in your 'query' string to provide cross-agent context.
     """
-    # Fetch latest raw data to give context to the sub-agent
     raw_sleep_data = await db.sleep_logs.find().sort("date", -1).limit(30).to_list(length=30)
     user_profile = await get_active_user_profile()
-    
-    payload = f"User Profile Context:\n{user_profile}\n\nUser Question & Context: {query}\nSchema Mapping: {json.dumps(SCHEMA_MAPPING)}\nRaw Data: {json.dumps(raw_sleep_data, default=str)}"
-    
-    # Use ADK's run_node to make the sub-agent a First Class Citizen in Traces
-    result = await tool_context.run_node(sleep_agent, node_input=payload)
-    return _extract_text(result)
 
-async def tool_analyze_exercise_and_metrics(query: str, tool_context: ToolContext) -> str:
+    payload = (
+        f"User Profile Context:\n{user_profile}\n\n"
+        f"User Question & Context: {query}\n"
+        f"Schema Mapping: {json.dumps(SCHEMA_MAPPING)}\n"
+        f"Raw Data: {json.dumps(raw_sleep_data, default=str)}"
+    )
+    return await _run_sub_agent(sleep_agent, payload)
+
+
+async def tool_analyze_exercise_and_metrics(query: str) -> str:
     """Specialized tool for training volume, physical performance, and daily activity metrics.
     IMPORTANT FOR ROOT AGENT: Include any findings from other sub-agents in your 'query' string to provide cross-agent context.
     """
-    # Inject recent exercise sessions and activity data
     raw_exercise_data = await db.sessions.find().sort("date", -1).limit(30).to_list(length=30)
     user_profile = await get_active_user_profile()
-    
-    payload = f"User Profile Context:\n{user_profile}\n\nUser Question & Context: {query}\nSchema Mapping: {json.dumps(SCHEMA_MAPPING)}\nData: {json.dumps(raw_exercise_data, default=str)}"
-    result = await tool_context.run_node(exercise_metrics_agent, node_input=payload)
-    return _extract_text(result)
 
-async def tool_analyze_weight(query: str, tool_context: ToolContext) -> str:
+    payload = (
+        f"User Profile Context:\n{user_profile}\n\n"
+        f"User Question & Context: {query}\n"
+        f"Schema Mapping: {json.dumps(SCHEMA_MAPPING)}\n"
+        f"Data: {json.dumps(raw_exercise_data, default=str)}"
+    )
+    return await _run_sub_agent(exercise_metrics_agent, payload)
+
+
+async def tool_analyze_weight(query: str) -> str:
     """Specialized tool for weight trends and body composition analysis.
     IMPORTANT FOR ROOT AGENT: Include any findings from other sub-agents in your 'query' string to provide cross-agent context.
     """
-    # Inject weight logs (assuming weight_logs collection exists per schema)
     raw_weight_data = await db.weight_logs.find().sort("date", -1).limit(30).to_list(length=30)
     user_profile = await get_active_user_profile()
-    
-    payload = f"User Profile Context:\n{user_profile}\n\nUser Question & Context: {query}\nSchema Mapping: {json.dumps(SCHEMA_MAPPING)}\nData: {json.dumps(raw_weight_data, default=str)}"
-    result = await tool_context.run_node(weight_agent, node_input=payload)
-    return _extract_text(result)
+
+    payload = (
+        f"User Profile Context:\n{user_profile}\n\n"
+        f"User Question & Context: {query}\n"
+        f"Schema Mapping: {json.dumps(SCHEMA_MAPPING)}\n"
+        f"Data: {json.dumps(raw_weight_data, default=str)}"
+    )
+    return await _run_sub_agent(weight_agent, payload)
 
 # --- MCP Tool Integration ---
 
