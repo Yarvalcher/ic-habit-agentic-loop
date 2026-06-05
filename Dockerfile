@@ -1,35 +1,44 @@
-# Copyright 2026 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+# ==========================================
+# Stage 1: Build virtual environment
+# ==========================================
+FROM python:3.11-slim AS builder
 
-FROM python:3.11-slim
-
+# Install uv cleanly
 RUN pip install --no-cache-dir uv==0.8.13
 
 WORKDIR /code
 
-COPY ./pyproject.toml ./README.md ./uv.lock* ./
+# Copy environment definitions first to cache the layer
+COPY pyproject.toml uv.lock* ./
 
+# Sync dependencies. By default, uv creates a .venv folder here
+RUN uv sync --frozen --no-dev --no-install-project
+
+# ==========================================
+# Stage 2: Minimal Runtime Execution Layer
+# ==========================================
+FROM python:3.11-slim
+
+WORKDIR /code
+
+# Copy the built virtual environment from the builder stage
+COPY --from=builder /code/.venv /code/.venv
+
+# Copy your core application code
 COPY ./app ./app
+COPY ./README.md ./README.md
 
-RUN uv sync --frozen
-
+# Build-time metadata arguments
 ARG COMMIT_SHA=""
 ENV COMMIT_SHA=${COMMIT_SHA}
 
 ARG AGENT_VERSION=0.0.0
 ENV AGENT_VERSION=${AGENT_VERSION}
 
+# Place the virtual environment's bin folder at the front of PATH
+ENV PATH="/code/.venv/bin:$PATH"
+
 EXPOSE 8080
 
-CMD ["uv", "run", "uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
+# Run via uvicorn directly out of the activated virtual environment path
+CMD ["uvicorn", "app.fast_api_app:app", "--host", "0.0.0.0", "--port", "8080"]
