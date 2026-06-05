@@ -119,3 +119,4 @@ See the [deployment guide](https://googlecloudplatform.github.io/agent-starter-p
 
 Built-in telemetry exports to Cloud Trace, BigQuery, and Cloud Logging.
 See the [observability guide](https://googlecloudplatform.github.io/agent-starter-pack/guide/observability) for queries and dashboards.
+# Updated Trigger
