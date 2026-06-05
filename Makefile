@@ -44,12 +44,12 @@ deploy:
 		--source . \
 		--memory "4Gi" \
 		--project $$PROJECT_ID \
-		--region "us-east1" \
+		--region "europe-west1" \
 		--no-allow-unauthenticated \
 		--no-cpu-throttling \
 		--labels "created-by=adk" \
 		--update-build-env-vars "AGENT_VERSION=$(shell awk -F'"' '/^version = / {print $$2}' pyproject.toml || echo '0.0.0')" \
-		--update-env-vars \
+		--set-secrets="MONGODB_READONLY_URI=mongodb_url_read:latest,MONGODB_WRITE_URI=mongodb_url:latest,GEMINI_API_KEY=GEMINI_API:latest" \
 		"" \
 		$(if $(IAP),--iap) \
 		$(if $(PORT),--port=$(PORT))

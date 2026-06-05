@@ -171,6 +171,8 @@ def test_chat_stream(server_fixture: subprocess.Popen[str]) -> None:
             has_text_content = True
             break
 
+# Add this assertion at the end of the test function block to make the variable active
+    assert has_text_content is True, "The server response candidate parts did not emit any text content fields."
 
 def test_chat_stream_error_handling(server_fixture: subprocess.Popen[str]) -> None:
     """Test the chat stream error handling."""
