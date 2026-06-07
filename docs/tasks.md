@@ -22,3 +22,12 @@ Based on the roadmap outlined in `ideas.md`, here is the tracked status of all i
 
 - [ ] **Task 6: Scheduled Sensing**
   - Implement a cron job or background scheduler that triggers the Brain agent every morning to scan for "Metabolic Drift" and generate notifications proactively.
+
+## Phase 4: Predictive Burnout & Injury Modeling
+
+- [x] **Task 7: The Burnout Risk Model**
+  - Created a pure Python mathematical model to calculate strain risk based on quantitative and qualitative data.
+  - Implemented full TDD test coverage for edge cases and mathematical bounds.
+- [x] **Task 8: Agent Integration**
+  - Added `predict_burnout_risk` tool to the Root Agent.
+  - Updated Root Agent instructions to proactively recommend a deload session when the Risk Score exceeds 80.

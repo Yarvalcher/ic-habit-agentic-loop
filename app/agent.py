@@ -13,6 +13,8 @@ from mcp import StdioServerParameters
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field
 
+from app.app_utils.burnout_model import calculate_burnout_risk_score
+
 
 def get_secret(secret_id):
     """Retrieves secrets from GCP Secret Manager using ADC."""
@@ -177,7 +179,7 @@ exercise_metrics_agent = Agent(
 weight_agent = Agent(
     model="gemini-3.1-flash-lite",
     name="weight_analyst",
-    instruction="Analyze body composition trends and caloric maintenance levels based on weight logs. Additionally it could be information about measures of the athletes as biceps, back and weist in cm. You could find a body fat precentage as well",
+    instruction="Analyze body composition trends and caloric maintenance levels based on weight logs. Additionally it could be information about measures of the athletes as biceps, back and weist in cm. You could find a body fat percentage as well",
 )
 
 biomarkers_agent = Agent(
@@ -357,6 +359,26 @@ async def tool_review_decision_log(query: str) -> str:
     return await _run_sub_agent(decision_log_agent, payload)
 
 
+async def predict_burnout_risk(user_id: str = "athlete_001") -> str:
+    """Specialized tool: Predicts Burnout Risk Score (0-100) based on recent volume, sleep, and lifestyle logs."""
+    # 1. Volume (last 7 days)
+    recent_sessions = await db.sessions.find().sort("date", -1).limit(7).to_list(length=7)
+    recent_volume = sum(s.get("total_volume", 0) for s in recent_sessions)
+    baseline_volume = 10000 # hardcoded baseline to prevent complex lookbacks for now
+    
+    # 2. Sleep
+    recent_sleep = await db.sleep_logs.find().sort("date", -1).limit(7).to_list(length=7)
+    avg_sleep = sum(sl.get("duration_h", 0) for sl in recent_sleep) / len(recent_sleep) if recent_sleep else 7.5
+
+    # 3. Mood
+    recent_lifestyle = await db.lifestyle_logs.find().sort("date", -1).limit(7).to_list(length=7)
+    negative_mood_days = sum(1 for log in recent_lifestyle if "Anxious" in log.get("mood", "") or "Low" in log.get("energy_level", ""))
+
+    score = calculate_burnout_risk_score(recent_volume, baseline_volume, avg_sleep, negative_mood_days)
+    
+    return f"BURNOUT RISK PREDICTION: The current Burnout Risk Score is {score}/100. (Based on recent volume: {recent_volume}, avg sleep: {avg_sleep:.1f}h, and {negative_mood_days} negative mood days)."
+
+
 # --- MCP Tool Integration ---
 
 # --- Main Root Agent ---
@@ -372,12 +394,13 @@ root_agent = Agent(
         "1. Use 'tool_analyze_sleep', 'tool_analyze_exercise_and_metrics', and 'tool_analyze_weight' for detailed domain analysis. "
         "   IMPORTANT: Always pass relevant findings from previous tools into the 'query' argument of the next tool to build cross-agent context. "
         "2. Use 'get_performance_correlation' for high-level physiological sensing. "
-        "3. Use 'tool_analyze_biomarkers' to interpret blood work and hormone panels when the user asks about health markers or clinical data. "
-        "4. Use 'tool_analyze_lifestyle' to evaluate stress, caffeine/alcohol intake, and subjective recovery scores. "
-        "5. Use 'tool_review_decision_log' BEFORE making new recommendations to check what interventions have already been suggested, avoiding repetition. "
-        "6. Use the 'insert-one' tool from the MongoDB MCP server to onboard new users or save processed profiles into MongoDB. "
-        "7. If metrics indicate high strain (volume > 8000, sleep < 7h), trigger a 'Deload Phase' recommendation. "
-        "8. DECISION LOGGING: Whenever you recommend a specific action plan, Deload Phase, or make a significant conclusion, "
+        "3. Use 'predict_burnout_risk' to calculate the Burnout Risk Score based on quantitative and qualitative data. If the Risk Score > 80, strongly advise against heavy training and proactively recommend a deload or mobility session. "
+        "4. Use 'tool_analyze_biomarkers' to interpret blood work and hormone panels when the user asks about health markers or clinical data. "
+        "5. Use 'tool_analyze_lifestyle' to evaluate stress, caffeine/alcohol intake, and subjective recovery scores. "
+        "6. Use 'tool_review_decision_log' BEFORE making new recommendations to check what interventions have already been suggested, avoiding repetition. "
+        "7. Use the 'insert-one' tool from the MongoDB MCP server to onboard new users or save processed profiles into MongoDB. "
+        "8. If metrics indicate high strain (volume > 8000, sleep < 7h), trigger a 'Deload Phase' recommendation. "
+        "9. DECISION LOGGING: Whenever you recommend a specific action plan, Deload Phase, or make a significant conclusion, "
         "   use the MongoDB 'insert-one' tool to save a JSON document detailing your recommendation and reasoning into the 'decision_log' collection."
     ),
     tools=[
@@ -389,6 +412,7 @@ root_agent = Agent(
         tool_analyze_biomarkers,
         tool_analyze_lifestyle,
         tool_review_decision_log,
+        predict_burnout_risk,
         McpToolset(
             connection_params=StdioConnectionParams(
                 server_params=StdioServerParameters(
