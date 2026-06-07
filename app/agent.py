@@ -33,7 +33,8 @@ db = db_client["habit_os_agent"]
 
 
 class DietaryStrategy(BaseModel):
-    calories_kcal: int
+    calories_kcal_training_day: int
+    calories_kcal_rest_day: int
     protein_g: int
 
 
@@ -55,6 +56,7 @@ class UserProfile(BaseModel):
     age: int
     gender: str
     base_location: str
+    height_cm: int | None = Field(None, alias="height_cm")
 
     data_processed: str
     optimization_status: str
